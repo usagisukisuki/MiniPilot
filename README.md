@@ -2,6 +2,7 @@
   <img src="assets/minipilot_logo.svg" alt="MiniPilot logo" width="600">
 </p>
 
+---
 <p align="center">
   <img src="assets/model_size_comparison.png" alt="Model size comparison" width="800">
 </p>
