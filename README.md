@@ -9,7 +9,7 @@
 
 ## Model
 
-| 名前 | Vision Encoder | Text Encoder | グリッド | `d_vis` | パラメータ (学習対象) |
+| Name | Vision Encoder | Text Encoder | Grid | `d_vis` | Params (trainable) |
 |------|---------------|-------------|---------|---------|----------------------|
 | **MiniPilot** | DINOv3 ViT-S/16 (`dinov3_vits`) | MiniLM-L6 (`minilm-l6`) | 14×14 (196) | 384 | ~4M |
 | **NanoPilot** | ViT-Tiny/16 (`vit_tiny`) | MiniLM-L6 (`minilm-l6`) | 14×14 (196) | 192 | ~2M |
@@ -32,12 +32,12 @@ python train.py --config configs/config.yaml --vision-encoder mobilevit_xxs --te
 
 ## Result
 
-CORE benchmark の代替評価（`test.py`、`--no-steervit`）の結果。値は % で、太字は各列の最高値。
-全モデル共通の学習設定: `--teacher bbox --dataset all --epochs 30`。
+Results of the CORE benchmark proxy evaluation (`test.py`, `--no-steervit`). Values are in %; bold marks the best value in each column.
+Training setup shared by all models: `--teacher bbox --dataset all --epochs 30`.
 
-- **PA** (Pointing Accuracy): heatmap の argmax パッチの中心が GT bbox 内に入る割合 (↑)
-- **AHP** (Avg Heatmap Precision): GT bbox 内に入る heatmap 質量の割合 (↑)
-- **PA_wrong**: テキストをシャッフルしたときの PA。PA との差が大きいほどテキストに依存して位置を決めている
+- **PA** (Pointing Accuracy): fraction of samples where the center of the heatmap's argmax patch falls inside the GT bbox (↑)
+- **AHP** (Avg Heatmap Precision): fraction of heatmap mass inside the GT bbox (↑)
+- **PA_wrong**: PA when the text prompts are shuffled. The larger the gap to PA, the more the model relies on the text to localize
 
 ### PA (%)
 
@@ -60,66 +60,66 @@ CORE benchmark の代替評価（`test.py`、`--no-steervit`）の結果。値�
 | **MiniPilot** | DINOv3 ViT-S/16 | MiniLM-L6 | 20.9 | 25.0 | 22.3 | 23.7 | 26.1 | 26.6 | 30.5 | 23.3 | 17.5 |
 | NanoPilot | ViT-Tiny/16 | MiniLM-L6 | 22.5 | 24.9 | 22.8 | 24.6 | 27.4 | 26.1 | 30.3 | 23.3 | 17.3 |
 
-- MiniPilot (DINOv3) が全データセットで最も高く、NanoPilot (ViT-Tiny) に対して PA は RefCOCO で +4〜9pt、VG で +8.9pt、GQA で +7.7pt。
-- NanoPilot の RefCOCO+ / RefCOCOg / GQA はテキストログ (`logs/test_output_minilm_l6_*.txt`) から転記。
+- MiniPilot (DINOv3) is the best on every dataset. Compared with NanoPilot (ViT-Tiny), its PA is +4–9pt higher on RefCOCO, +8.9pt on VG and +7.7pt on GQA.
+- NanoPilot's RefCOCO+ / RefCOCOg / GQA numbers are taken from the text logs (`logs/test_output_minilm_l6_*.txt`).
 
-### モデルサイズ・計算量 (vs. SteerViT)
+### Model size and compute (vs. SteerViT)
 
-| モデル | Vision / Text | 総パラメータ | 学習対象 | FLOPs (B=1) | RefCOCO val PA |
+| Model | Vision / Text | Total params | Trainable | FLOPs (B=1) | RefCOCO val PA |
 |---|---|---:|---:|---:|---:|
-| SteerViT (元モデル) | DINOv2 ViT-B/14 / RoBERTa-large | 464.4M | 23.1M | 135.76G (336px) | — |
+| SteerViT (original) | DINOv2 ViT-B/14 / RoBERTa-large | 464.4M | 23.1M | 135.76G (336px) | — |
 | **MiniPilot** | DINOv3 ViT-S/16 / MiniLM-L6 | 53.3M (11.5%) | 9.03M | 11.55G (8.5%) | 84.5 |
 | NanoPilot | ViT-Tiny/16 / MiniLM-L6 | 30.5M (6.6%) | 2.30M | 3.38G (2.5%) | 79.0 |
 
-- (%) は SteerViT 比。学習対象 = connector + GatedCrossAttn + lin_seg_head。
-- 値は `test.py` が出力するパラメータ数 / FLOPs 表から転記。
-- SteerViT のパラメータの 76% はテキストエンコーダ (RoBERTa-large 355M)。MiniPilot / NanoPilot でもテキスト側 (MiniLM-L6 22.7M) が総パラメータの 4〜7 割を占める。
-- SteerViT 自体の精度は未評価（全評価が `--no-steervit` で実行されているため）。
+- (%) is relative to SteerViT. Trainable = connector + GatedCrossAttn + lin_seg_head.
+- Values are taken from the parameter / FLOPs tables printed by `test.py`.
+- 76% of SteerViT's parameters are in the text encoder (RoBERTa-large, 355M). For MiniPilot / NanoPilot the text side (MiniLM-L6, 22.7M) still accounts for 40–70% of the total.
+- SteerViT's own accuracy has not been evaluated (all evaluations were run with `--no-steervit`).
 
 ---
 
-## アーキテクチャ
+## Architecture
 
 ```
-テキスト入力
-  └─ テキストエンコーダ (frozen, --text-encoder で選択)
-       └─ connector: Linear(d_text → d_vis)  ★学習
-            └─ GatedCrossAttn × n_blocks  ★学習
-                 └─ ビジョンバックボーン (pretrained, frozen, --vision-encoder で選択)
-                      └─ lin_seg_head: Linear(d_vis → 1)  ★学習
+Text input
+  └─ Text encoder (frozen, selected with --text-encoder)
+       └─ connector: Linear(d_text → d_vis)  ★trained
+            └─ GatedCrossAttn × n_blocks  ★trained
+                 └─ Vision backbone (pretrained, frozen, selected with --vision-encoder)
+                      └─ lin_seg_head: Linear(d_vis → 1)  ★trained
                            └─ patch logits (grid×grid patches)
 
-損失: SoftCE(student_logits, teacher_soft)
+Loss: SoftCE(student_logits, teacher_soft)
 ```
 
-| コンポーネント | パラメータ数 | 学習 |
+| Component | Params | Trained |
 |--------------|------------|------|
-| ビジョンバックボーン | 下表参照 | ✗ frozen (ImageNet pretrained) |
-| テキストエンコーダ | 下表参照 | ✗ frozen |
+| Vision backbone | see table below | ✗ frozen (ImageNet pretrained) |
+| Text encoder | see table below | ✗ frozen |
 | connector (d_text→d_vis) | d_text × d_vis | ✓ |
 | GatedCrossAttn × n | ~1–3M | ✓ |
 | lin_seg_head | d_vis + 1 | ✓ |
 
 ---
 
-## ビジョンエンコーダ (`--vision-encoder`)
+## Vision encoder (`--vision-encoder`)
 
-`--vision-encoder` でバックボーンを切り替えられる。
+The backbone can be switched with `--vision-encoder`.
 
-| キー | モデル | 入力解像度 | グリッド | `d_vis` | GCA 挿入箇所 |
+| Key | Model | Input resolution | Grid | `d_vis` | GCA insertion points |
 |------|--------|-----------|---------|---------|-------------|
-| `vit_tiny` (デフォルト) | `vit_tiny_patch16_224` | 224×224 | 14×14 (196) | 192 | 各 Transformer ブロック後 (×12) |
-| `dinov3_vits` | `vit_small_patch16_dinov3.lvd1689m` | 224×224 | 14×14 (196) | 384 | 各 Transformer ブロック後 (×12) |
-| `efficientformerv2_s0` | `efficientformerv2_s0.snap_dist_in1k` | 224×224 | 7×7 (49) | 176 | 各ブロック後 (×14: s0×2, s1×2, s2×6, s3×4) |
-| `fastvit_t8` | `fastvit_t8.apple_dist_in1k` | 256×256 | 8×8 (64) | 768 | 各ステージ後 (×4) |
-| `mobilevit_xxs` | `mobilevit_xxs` | 256×256 | 8×8 (64) | 320 | 各ステージ後 (×5) |
+| `vit_tiny` (default) | `vit_tiny_patch16_224` | 224×224 | 14×14 (196) | 192 | after every Transformer block (×12) |
+| `dinov3_vits` | `vit_small_patch16_dinov3.lvd1689m` | 224×224 | 14×14 (196) | 384 | after every Transformer block (×12) |
+| `efficientformerv2_s0` | `efficientformerv2_s0.snap_dist_in1k` | 224×224 | 7×7 (49) | 176 | after every block (×14: s0×2, s1×2, s2×6, s3×4) |
+| `fastvit_t8` | `fastvit_t8.apple_dist_in1k` | 256×256 | 8×8 (64) | 768 | after every stage (×4) |
+| `mobilevit_xxs` | `mobilevit_xxs` | 256×256 | 8×8 (64) | 320 | after every stage (×5) |
 
-- `vit_tiny` / `dinov3_vits`: patch token ベースの ViT。CLS トークンあり (num_prefix=1)
-- `efficientformerv2_s0`: 階層 ViT (stem + 4 stages)。前半ステージは MLP-only、後半に Attention2d。CLS トークンなし (num_prefix=0)
-- `fastvit_t8` / `mobilevit_xxs`: CNN ライクな stem+stages+final_conv 構造。CLS トークンなし (num_prefix=0)
+- `vit_tiny` / `dinov3_vits`: patch-token ViTs with a CLS token (num_prefix=1)
+- `efficientformerv2_s0`: hierarchical ViT (stem + 4 stages). Early stages are MLP-only, later stages use Attention2d. No CLS token (num_prefix=0)
+- `fastvit_t8` / `mobilevit_xxs`: CNN-like stem + stages + final_conv structure. No CLS token (num_prefix=0)
 
-ビジョンエンコーダを変えると `connector` のサイズ (`d_text → d_vis`) と GCA 数が自動的に変わる。  
-チェックポイントに保存され、`test.py` ロード時に自動復元される。
+Changing the vision encoder automatically changes the `connector` size (`d_text → d_vis`) and the number of GCA blocks.  
+The setting is saved in the checkpoint and restored automatically when `test.py` loads it.
 
 ```bash
 python train.py --config configs/config.yaml --vision-encoder efficientformerv2_s0 --out ./ckpts_picopilot
@@ -129,27 +129,27 @@ python train.py --config configs/config.yaml --vision-encoder mobilevit_xxs --ou
 
 ---
 
-## テキストエンコーダ (`--text-encoder`)
+## Text encoder (`--text-encoder`)
 
-| キー | モデル | `d_text` | パラメータ数 |
+| Key | Model | `d_text` | Params |
 |------|--------|----------|------------|
-| `distilroberta` (デフォルト) | `distilbert/distilroberta-base` | 768 | ~82M |
+| `distilroberta` (default) | `distilbert/distilroberta-base` | 768 | ~82M |
 | `tinybert-l6` | `huawei-noah/TinyBERT_General_6L_768D` | 768 | ~67M |
 | `tinybert-l4` | `huawei-noah/TinyBERT_General_4L_312D` | 312 | ~14M |
 | `minilm-l6` | `sentence-transformers/all-MiniLM-L6-v2` | 384 | ~23M |
 
-テキストエンコーダを変えると `connector` のサイズ (`d_text → 192`) も自動的に変わる。  
-チェックポイントにはテキストエンコーダの情報が保存され、`test.py` ロード時に自動復元される。
+Changing the text encoder automatically changes the `connector` size (`d_text → d_vis`) as well.  
+The text encoder is saved in the checkpoint and restored automatically when `test.py` loads it.
 
 ---
 
-## Teacher の種類 (`--teacher`)
+## Teacher types (`--teacher`)
 
-`--teacher` オプションで teacher の soft target を切り替えられる。
+The `--teacher` option selects the source of the teacher soft target.
 
-### `steervit` (デフォルト)
+### `steervit` (default)
 
-SteerViT pretrained の heatmap を teacher とする。
+Uses the heatmap of pretrained SteerViT as the teacher.
 
 ```
 full_img (224px)
@@ -159,61 +159,61 @@ full_img (224px)
   → softmax → bilinear resize → 14×14 → teacher_soft
 ```
 
-- 利点: テキストと画像の対応を学習済みモデルが生成する高精度な soft target
-- 欠点: SteerViT のロードに GPU メモリが必要 (~1.5GB)
+- Pros: high-quality soft targets produced by a model that has already learned text–image correspondence
+- Cons: loading SteerViT requires GPU memory (~1.5GB)
 
 ### `bbox`
 
-GT bbox の patch overlap 面積を正規化した分布を teacher とする。
+Uses the normalized patch-overlap area of the GT bbox as the teacher distribution.
 
 ```
-bbox [x1, y1, x2, y2] (相対座標)
-  → 各 patch (14×14) との intersection 面積を計算
-  → 面積で正規化 → teacher_soft
+bbox [x1, y1, x2, y2] (relative coordinates)
+  → compute intersection area with each patch (14×14)
+  → normalize by area → teacher_soft
 ```
 
-- 利点: SteerViT 不要・高速・アノテーション忠実
-- 欠点: bbox 内を一様に扱うためテキストの意味は反映されない
+- Pros: no SteerViT needed, fast, faithful to the annotations
+- Cons: treats the bbox interior uniformly, so the meaning of the text is not reflected
 
 ### `both`
 
-SteerViT heatmap と bbox mask の平均を teacher とする。
+Uses the average of the SteerViT heatmap and the bbox mask as the teacher.
 
 ```
 teacher_soft = 0.5 × steervit_soft + 0.5 × bbox_soft
 ```
 
-- 利点: テキスト意味と GT 位置の両方を supervision に使える
+- Pros: supervises with both text semantics and GT location
 
 ---
 
-## 環境
+## Environment
 
 ```bash
 conda activate steerdet
 ```
 
-必要パッケージ: `torch`, `timm >= 1.0`, `transformers`, `torchvision`, `pycocotools`, `tqdm`, `matplotlib`, `pyyaml`
+Required packages: `torch`, `timm >= 1.0`, `transformers`, `torchvision`, `pycocotools`, `tqdm`, `matplotlib`, `pyyaml`
 
 ---
 
-## データセット
+## Datasets
 
-| データセット | パス | 備考 |
+| Dataset | Path | Notes |
 |-------------|------|------|
 | RefCOCO | `/data2/kato/dataset/coco/refcoco/` | `refs(unc).p` + `instances.json` |
 | COCO 2017 | `/data2/kato/dataset/coco/` | `train2017/`, `val2017/`, `annotations/` |
 | Visual Genome | `/data2/kato/dataset/vg/` | `region_descriptions.json` |
 | GQA | `/data2/kato/dataset/GQA/` | `*_sceneGraphs.json` |
 
-パスは `config.yaml` の `paths` セクションで変更できる。
+Paths can be changed in the `paths` section of `config.yaml`.
 
 ---
 
-## Config ファイル (`config.yaml`)
+## Config file (`config.yaml`)
 
-全パラメータとパスを `config.yaml` で管理できる。  
-**優先順位: CLI 引数 > config.yaml > argparse デフォルト値**
+All parameters and paths can be managed in `config.yaml`.  
+**Priority: CLI arguments > config.yaml > argparse defaults**
 
 ```yaml
 paths:
@@ -233,60 +233,60 @@ train:
   ...
 
 test:
-  ckpt:       null   # test.py の --ckpt デフォルト値
+  ckpt:       null   # default for test.py --ckpt
   dataset:    "refcoco"
   batch_size: 64
   ...
 ```
 
 ```bash
-# config.yaml をベースに実行 (CLI 引数で上書き可)
+# Run with config.yaml as the base (CLI arguments override)
 python train.py --config configs/config.yaml
 
-# config の一部だけ上書き
+# Override only part of the config
 python train.py --config configs/config.yaml --epochs 30 --batch-size 128 --text-encoder tinybert-l4
 ```
 
 ---
 
-## 学習
+## Training
 
 ```bash
-# config.yaml のデフォルト設定で実行
+# Run with the default settings in config.yaml
 python train.py --config configs/config.yaml
 
-# テキストエンコーダを変えて学習
+# Train with a different text encoder
 python train.py --config configs/config.yaml --text-encoder tinybert-l4 --out ./ckpts_tinybert_l4
 python train.py --config configs/config.yaml --text-encoder tinybert-l6 --out ./ckpts_tinybert_l6
 python train.py --config configs/config.yaml --text-encoder minilm-l6   --out ./ckpts_minilm_l6
 
-# bbox mask teacher (SteerViT 不要・高速)
+# bbox mask teacher (no SteerViT needed, fast)
 python train.py --config configs/config.yaml --teacher bbox
 
-# ビジョンエンコーダを切り替えて学習
+# Train with a different vision encoder
 python train.py --config configs/config.yaml --vision-encoder dinov3_vits         --out ./ckpts_dinov3_vits
 python train.py --config configs/config.yaml --vision-encoder efficientformerv2_s0 --out ./ckpts_picopilot
 python train.py --config configs/config.yaml --vision-encoder fastvit_t8           --out ./ckpts_fastvit
 python train.py --config configs/config.yaml --vision-encoder mobilevit_xxs        --out ./ckpts_mobilevit
 
-# 教師キャッシュを使った学習 (SteerViT をロードしない)
-python precompute_teacher.py --dataset refcoco --out ./teacher_cache/refcoco       # 事前計算 (初回のみ)
-python train.py --config configs/config.yaml --teacher-cache ./teacher_cache/refcoco       # heatmap 蒸留のみ
-python train.py --config configs/config.yaml --teacher-cache ./teacher_cache/refcoco --attn-distil  # attn distil も
+# Train with a teacher cache (SteerViT is not loaded)
+python precompute_teacher.py --dataset refcoco --out ./teacher_cache/refcoco       # precompute (first time only)
+python train.py --config configs/config.yaml --teacher-cache ./teacher_cache/refcoco       # heatmap distillation only
+python train.py --config configs/config.yaml --teacher-cache ./teacher_cache/refcoco --attn-distil  # with attn distillation
 
-# 全データセットで学習
+# Train on all datasets
 python train.py --config configs/config.yaml --dataset all --batch-size 512 --teacher bbox
 ```
 
-デフォルト設定:
+Default settings:
 
-| 設定 | 値 |
+| Setting | Value |
 |------|---|
 | backbone | vit_tiny_patch16_224 (ImageNet pretrained) |
 | text encoder | `distilroberta` (frozen) |
 | teacher | `steervit` |
 | full image size (student) | 224×224 |
-| full image size (teacher) | 336×336 (内部で bicubic リサイズ) |
+| full image size (teacher) | 336×336 (bicubic resize internally) |
 | epochs | 50 |
 | batch size | 64 |
 | lr | 3e-4 (CosineAnnealing → 3e-6) |
@@ -296,109 +296,109 @@ python train.py --config configs/config.yaml --dataset all --batch-size 512 --te
 
 ## Attention Distillation (`--attn-distil`)
 
-`--teacher steervit` または `--teacher both` のとき、出力 heatmap に加えて各 Transformer ブロックの **Self-Attention (SA)** と **Cross-Attention (CA)** の分布も teacher から蒸留できる。
+With `--teacher steervit` or `--teacher both`, in addition to the output heatmap, the **Self-Attention (SA)** and **Cross-Attention (CA)** distributions of each Transformer block can also be distilled from the teacher.
 
-### 蒸留する情報
+### What is distilled
 
-| 種類 | 取得元 | 集約方法 |
+| Type | Source | Aggregation |
 |------|--------|----------|
-| **SA** | 各ブロックの ViT self-attention | CLS→patch 注意を head 平均 → (B, N_patches) |
-| **CA** | 各ブロックの GatedCrossAttn | patch→text 注意を head 平均 + text token 平均 → (B, N_patches) |
+| **SA** | ViT self-attention in each block | CLS→patch attention averaged over heads → (B, N_patches) |
+| **CA** | GatedCrossAttn in each block | patch→text attention averaged over heads and text tokens → (B, N_patches) |
 
-Teacher (24×24) と Student (各モデルのグリッドサイズ: vit_tiny=14×14, efficientformerv2_s0=7×7 等) の空間サイズは bilinear 補間で整合し、KL-div で蒸留する。
+The spatial sizes of the teacher (24×24) and the student (each model's grid: vit_tiny=14×14, efficientformerv2_s0=7×7, etc.) are aligned with bilinear interpolation and distilled with KL divergence.
 
-### 損失の構成
+### Loss composition
 
 ```
 total_loss = heatmap_loss
            + attn_weight × (sa_weight × SA_loss + ca_weight × CA_loss)
 ```
 
-### 使用例
+### Examples
 
 ```bash
-# デフォルト重み (attn_weight=1.0, sa=1.0, ca=1.0)
+# Default weights (attn_weight=1.0, sa=1.0, ca=1.0)
 python train.py --config configs/config.yaml --teacher steervit --attn-distil
 
-# heatmap : attn = 1 : 0.5, SA のみ
+# heatmap : attn = 1 : 0.5, SA only
 python train.py --config configs/config.yaml --teacher steervit --attn-distil \
     --attn-weight 0.5 --ca-weight 0.0
 
-# both モードでも使用可
+# Also works in both mode
 python train.py --config configs/config.yaml --teacher both --attn-distil \
     --attn-weight 1.0 --sa-weight 1.0 --ca-weight 0.5
 ```
 
-> **注意**: `--teacher bbox` のときは attn-distil は無視される（SteerViT 不使用のため）。
+> **Note**: attn-distil is ignored with `--teacher bbox` (SteerViT is not used).
 
-### ログ出力
+### Log output
 
-`--attn-distil` 有効時は各エポックのログに内訳が追記される:
+When `--attn-distil` is enabled, a breakdown is appended to each epoch's log line:
 
 ```
 [  1/ 50] train=16.01  val=15.83  lr=3.00e-04  12.3s  hmap=5.46  sa=5.28  ca=5.28
 ```
 
-`history.json` にも `last_heatmap_loss` / `last_sa_loss` / `last_ca_loss` が記録される。
+`last_heatmap_loss` / `last_sa_loss` / `last_ca_loss` are also recorded in `history.json`.
 
-### 速度・メモリへの影響
+### Impact on speed and memory
 
-attn-distil を有効にすると、通常の `--teacher steervit` に比べて以下のオーバーヘッドが生じる:
+Compared with plain `--teacher steervit`, enabling attn-distil adds the following overhead:
 
-| 項目 | 影響 |
+| Item | Impact |
 |------|------|
-| Teacher forward 回数 | 変化なし（heatmap と attn を 1 回の forward で同時取得） |
-| Teacher forward の速度 | Flash Attention が全ブロックで無効化されるため遅くなる |
-| Student forward の速度 | 全ブロックで attention map を収集するため遅くなる |
-| VRAM | 全ブロックの attention map を保持するため増加 |
+| Number of teacher forwards | unchanged (heatmap and attention are obtained in a single forward) |
+| Teacher forward speed | slower, because Flash Attention is disabled in all blocks |
+| Student forward speed | slower, because attention maps are collected from all blocks |
+| VRAM | increases, because attention maps of all blocks are kept |
 
-→ 学習を高速化したい場合は **教師キャッシュ** (`precompute_teacher.py`) を使うこと。
+→ To speed up training, use the **teacher cache** (`precompute_teacher.py`).
 
 ---
 
-## 教師キャッシュ (`precompute_teacher.py`)
+## Teacher cache (`precompute_teacher.py`)
 
-`--teacher steervit` や `--attn-distil` を使うと毎バッチ SteerViT を実行するため学習が遅くなる。  
-`precompute_teacher.py` で **SteerViT の出力を事前計算・保存**しておくと、学習中は SteerViT をロードせずにキャッシュから読むだけになる。
+With `--teacher steervit` or `--attn-distil`, SteerViT runs on every batch, which slows training down.  
+If you **precompute and save SteerViT's outputs** with `precompute_teacher.py`, training only reads from the cache without loading SteerViT.
 
-### 保存されるファイル
+### Saved files
 
-| ファイル | 内容 | 形状 | dtype |
+| File | Content | Shape | dtype |
 |---------|------|------|-------|
 | `soft.dat` | softmax heatmap | (N, 576) | float16 |
-| `sa.dat` | SA 注意の圧縮分布 | (N, n_blocks, 576) | float16 |
-| `ca.dat` | CA 注意の圧縮分布 | (N, n_blocks, 576) | float16 |
-| `meta.json` | メタデータ | — | JSON |
+| `sa.dat` | compressed SA attention distribution | (N, n_blocks, 576) | float16 |
+| `ca.dat` | compressed CA attention distribution | (N, n_blocks, 576) | float16 |
+| `meta.json` | metadata | — | JSON |
 
-`--no-attn` を付けると `sa.dat` / `ca.dat` を省略（heatmap 蒸留のみのとき推奨）。
+With `--no-attn`, `sa.dat` / `ca.dat` are skipped (recommended for heatmap-only distillation).
 
-SA/CA の圧縮方法:
-- **SA**: CLS→patch 注意をヘッド平均 → 正規化 → (576,) per block
-- **CA**: patch→text 注意をヘッド平均 + テキスト平均 → 正規化 → (576,) per block
+How SA/CA are compressed:
+- **SA**: CLS→patch attention averaged over heads → normalized → (576,) per block
+- **CA**: patch→text attention averaged over heads and text → normalized → (576,) per block
 
-### ステップ 1: キャッシュ生成
+### Step 1: Generate the cache
 
-**ローカル** (`precompute_teacher.py`):
+**Local** (`precompute_teacher.py`):
 
 ```bash
-# heatmap + SA/CA を保存（--attn-distil と組み合わせる場合）
+# Save heatmap + SA/CA (when combined with --attn-distil)
 python precompute_teacher.py \
     --dataset refcoco \
     --out ./teacher_cache/refcoco \
     --split train
 
-# heatmap のみ（高速、attn distil なしで使う場合）
+# Heatmap only (faster, when not using attn distillation)
 python precompute_teacher.py \
     --dataset refcoco \
     --out ./teacher_cache/refcoco_noattn \
     --split train \
     --no-attn
 
-# val set も同様に
+# Same for the val set
 python precompute_teacher.py --dataset refcoco --out ./teacher_cache/refcoco_val --split val
 ```
 
-生成後のディレクトリ構造:
+Resulting directory structure:
 
 ```
 teacher_cache/
@@ -409,43 +409,43 @@ teacher_cache/
   gqa/        ...
 ```
 
-| オプション | デフォルト | 説明 |
+| Option | Default | Description |
 |-----------|-----------|------|
-| `--dataset` | (必須) | `refcoco` / `refcoco+` / `refcocog` / `vg` / `gqa` / `coco` |
-| `--out` | (必須) | 出力ディレクトリ |
+| `--dataset` | (required) | `refcoco` / `refcoco+` / `refcocog` / `vg` / `gqa` / `coco` |
+| `--out` | (required) | output directory |
 | `--split` | `train` | `train` / `val` |
-| `--no-attn` | off | SA/CA を保存しない (soft heatmap のみ) |
-| `--steervit-ckpt` | config | SteerViT チェックポイントパス |
-| `--batch-size` | `32` | バッチサイズ |
-| `--num-workers` | `4` | DataLoader ワーカー数 |
+| `--no-attn` | off | do not save SA/CA (soft heatmap only) |
+| `--steervit-ckpt` | config | SteerViT checkpoint path |
+| `--batch-size` | `32` | batch size |
+| `--num-workers` | `4` | number of DataLoader workers |
 
-### ステップ 2: キャッシュを使って学習
+### Step 2: Train with the cache
 
-**ローカル** (`train.py`):
+**Local** (`train.py`):
 
 ```bash
-# heatmap 蒸留のみ（SteerViT をロードしない）
+# Heatmap distillation only (SteerViT is not loaded)
 python train.py --config configs/config.yaml \
     --dataset refcoco \
     --teacher-cache ./teacher_cache/refcoco_noattn
 
-# attn distil もキャッシュから（SA/CA 込みで生成したキャッシュが必要）
+# Attn distillation from the cache too (requires a cache generated with SA/CA)
 python train.py --config configs/config.yaml \
     --dataset refcoco \
     --teacher-cache ./teacher_cache/refcoco \
     --attn-distil
 ```
 
-`--teacher-cache` を指定すると:
-- SteerViT を**ロードしない**（起動高速化・VRAM 節約）
-- `fix_text=True` でテキスト選択を決定論的にしてキャッシュと一致させる
-- バッチにサンプルインデックスを付加してキャッシュを正しく参照する
-- `--dataset all` のときは `MultiTeacherCache` が自動的に各サブディレクトリを結合する
+When `--teacher-cache` is given:
+- SteerViT is **not loaded** (faster startup, less VRAM)
+- `fix_text=True` makes text selection deterministic so it matches the cache
+- sample indices are attached to each batch so the cache is looked up correctly
+- with `--dataset all`, `MultiTeacherCache` automatically combines the subdirectories
 
-`--dataset all` 時のキャッシュディレクトリ構造:
+Cache directory structure for `--dataset all`:
 
 ```
-teacher_cache/          ← --teacher-cache に渡すルートディレクトリ
+teacher_cache/          ← root directory passed to --teacher-cache
   refcoco/   meta.json  soft.dat  [sa.dat  ca.dat]
   refcoco+/  ...
   refcocog/  ...
@@ -453,94 +453,94 @@ teacher_cache/          ← --teacher-cache に渡すルートディレクトリ
   gqa/       ...
 ```
 
-> **注意 1**: キャッシュは **train split のみ**を対象にすること。  
-> val set は元々 SteerViT を実行しないので高速（キャッシュ不要）。  
-> **注意 2**: `--dataset all` + `--teacher-cache` を使う場合は `--max-train` を指定しないこと。  
-> `max_train` を指定すると各サブデータセットのサイズが変わり、キャッシュのインデックスとずれが生じる。
+> **Note 1**: Build the cache for the **train split only**.  
+> The val set does not run SteerViT in the first place, so it is already fast (no cache needed).  
+> **Note 2**: Do not pass `--max-train` when using `--dataset all` + `--teacher-cache`.  
+> `max_train` changes the size of each sub-dataset, so the indices no longer match the cache.
 
 ---
 
-## オプション一覧
+## Options
 
 ### train.py
 
-| オプション | デフォルト | 説明 |
+| Option | Default | Description |
 |-----------|-----------|------|
-| `--config` | — | YAML config ファイル (CLI 引数で上書き可) |
+| `--config` | — | YAML config file (CLI arguments override) |
 | `--text-encoder` | `distilroberta` | `distilroberta` / `tinybert-l6` / `tinybert-l4` / `minilm-l6` |
 | `--vision-encoder` | `vit_tiny` | `vit_tiny` / `dinov3_vits` / `efficientformerv2_s0` / `fastvit_t8` / `mobilevit_xxs` |
-| `--teacher` | `steervit` | teacher の種類: `steervit` / `bbox` / `both` |
-| `--no-pretrained-backbone` | — | ビジョンバックボーンも完全ランダム初期化 |
+| `--teacher` | `steervit` | teacher type: `steervit` / `bbox` / `both` |
+| `--no-pretrained-backbone` | — | randomly initialize the vision backbone as well |
 | `--dataset` | `refcoco` | `refcoco` / `refcoco+` / `refcocog` / `vg` / `gqa` / `coco` / `all` |
-| `--epochs` | `50` | 学習エポック数 |
-| `--batch-size` | `64` | バッチサイズ |
-| `--val-batch-size` | `16` | val loader のバッチサイズ |
-| `--lr` | `3e-4` | 初期学習率 |
+| `--epochs` | `50` | number of training epochs |
+| `--batch-size` | `64` | batch size |
+| `--val-batch-size` | `16` | batch size of the val loader |
+| `--lr` | `3e-4` | initial learning rate |
 | `--weight-decay` | `1e-2` | AdamW weight decay |
-| `--amp` | on | Mixed precision (bf16 対応 GPU では bf16、それ以外は FP16 + GradScaler) |
-| `--resume` | — | チェックポイントから再開 |
-| `--out` | `./ckpts` | 出力ディレクトリ |
-| `--vis-every` | `5` | N エポックごとに heatmap 可視化 (0 で無効) |
-| `--vis-n` | `4` | val set から自動収集する probe 数 |
-| `--vis-samples` | — | カスタム probe JSON |
-| `--attn-distil` | off | SA / CA attention map の蒸留を有効化 |
-| `--attn-weight` | `1.0` | attention distil loss 全体の重み |
-| `--sa-weight` | `1.0` | SA loss の重み |
-| `--ca-weight` | `1.0` | CA loss の重み |
-| `--teacher-cache` | — | 事前計算済み教師キャッシュのディレクトリ (`precompute_teacher.py` で生成) |
-| `--coco-root` | (config) | COCO データセットのルートパス |
-| `--vg-root` | (config) | Visual Genome のルートパス |
-| `--gqa-root` | (config) | GQA のルートパス |
-| `--steervit-ckpt` | (config) | SteerViT チェックポイントパス |
+| `--amp` | on | mixed precision (bf16 on GPUs that support it, otherwise FP16 + GradScaler) |
+| `--resume` | — | resume from a checkpoint |
+| `--out` | `./ckpts` | output directory |
+| `--vis-every` | `5` | visualize heatmaps every N epochs (0 to disable) |
+| `--vis-n` | `4` | number of probes collected automatically from the val set |
+| `--vis-samples` | — | custom probe JSON |
+| `--attn-distil` | off | enable SA / CA attention map distillation |
+| `--attn-weight` | `1.0` | overall weight of the attention distillation loss |
+| `--sa-weight` | `1.0` | weight of the SA loss |
+| `--ca-weight` | `1.0` | weight of the CA loss |
+| `--teacher-cache` | — | directory of a precomputed teacher cache (generated by `precompute_teacher.py`) |
+| `--coco-root` | (config) | root path of the COCO dataset |
+| `--vg-root` | (config) | root path of Visual Genome |
+| `--gqa-root` | (config) | root path of GQA |
+| `--steervit-ckpt` | (config) | SteerViT checkpoint path |
 
 ### test.py
 
-| オプション | デフォルト | 説明 |
+| Option | Default | Description |
 |-----------|-----------|------|
-| `--config` | — | YAML config ファイル |
-| `--ckpt` | (必須) | TinySteerViT チェックポイント (.pth) |
+| `--config` | — | YAML config file |
+| `--ckpt` | (required) | TinySteerViT checkpoint (.pth) |
 | `--dataset` | `refcoco` | `refcoco` / `refcoco+` / `refcocog` / `vg` / `gqa` |
-| `--split` | 全 split | `val` / `testA` / `testB` (refcocog・vg・gqa は `val` のみ) |
-| `--max-samples` | 全件 | 各 split の最大サンプル数 |
-| `--batch-size` | `64` | バッチサイズ |
-| `--num-workers` | `4` | DataLoader ワーカー数 |
-| `--no-steervit` | — | SteerViT teacher との比較をスキップ |
-| `--no-wrong-prompt` | — | Wrong-prompt 制御実験をスキップ |
-| `--vision-encoder` | (ckpt) | チェックポイントに保存された値を上書き |
-| `--text-encoder` | (ckpt) | チェックポイントに保存された値を上書き |
-| `--log` | 自動生成 | 結果を保存する JSON ファイルパス |
-| `--coco-root` | (config) | COCO データセットのルートパス |
-| `--vg-root` | (config) | Visual Genome のルートパス |
-| `--gqa-root` | (config) | GQA のルートパス |
-| `--steervit-ckpt` | (config) | SteerViT チェックポイントパス |
+| `--split` | all splits | `val` / `testA` / `testB` (`val` only for refcocog, vg and gqa) |
+| `--max-samples` | all | maximum number of samples per split |
+| `--batch-size` | `64` | batch size |
+| `--num-workers` | `4` | number of DataLoader workers |
+| `--no-steervit` | — | skip the comparison with the SteerViT teacher |
+| `--no-wrong-prompt` | — | skip the wrong-prompt control experiment |
+| `--vision-encoder` | (ckpt) | override the value saved in the checkpoint |
+| `--text-encoder` | (ckpt) | override the value saved in the checkpoint |
+| `--log` | auto-generated | path of the JSON file to save results to |
+| `--coco-root` | (config) | root path of the COCO dataset |
+| `--vg-root` | (config) | root path of Visual Genome |
+| `--gqa-root` | (config) | root path of GQA |
+| `--steervit-ckpt` | (config) | SteerViT checkpoint path |
 
 ---
 
-## 出力
+## Output
 
 ```
 ckpts/
-  train.log          # タイムスタンプ付きログ
-  history.json       # エポックごとの train/val loss
-  best_model.pth     # val_loss 最良チェックポイント
+  train.log          # timestamped log
+  history.json       # train/val loss per epoch
+  best_model.pth     # checkpoint with the best val_loss
   vis/
-    epoch_000.png    # 学習前 (初期状態)
+    epoch_000.png    # before training (initial state)
     epoch_005.png
     ...
 ```
 
-`best_model.pth` の構造:
+Structure of `best_model.pth`:
 
 ```python
 {
     "epoch":    int,
-    "sv_state": dict,   # connector + gated_cross_attn + lin_seg_head の state_dict
+    "sv_state": dict,   # state_dict of connector + gated_cross_attn + lin_seg_head
     "val_loss": float,
-    "args":     dict,   # text_encoder を含む学習時の全引数
+    "args":     dict,   # all training arguments, including text_encoder
 }
 ```
 
-再開:
+Resume:
 
 ```bash
 python train.py --config configs/config.yaml --resume ./ckpts/best_model.pth
@@ -548,22 +548,22 @@ python train.py --config configs/config.yaml --resume ./ckpts/best_model.pth
 
 ---
 
-## 可視化
+## Visualization
 
-各エポックの PNG の列構成は `--teacher` によって変わる:
+The column layout of each epoch's PNG depends on `--teacher`:
 
-| `--teacher` | 列1 | 列2 | 列3 | 列4 |
+| `--teacher` | Col 1 | Col 2 | Col 3 | Col 4 |
 |------------|-----|-----|-----|-----|
 | `steervit` | full image + bbox | teacher (SteerViT) | student | — |
 | `bbox`     | full image + bbox | teacher (bbox mask) | student | — |
 | `both`     | full image + bbox | teacher (SteerViT) | teacher (bbox mask) | student |
 
-- **full image + bbox**: 入力画像にテキストと GT bbox を黄枠で描画
-- **teacher (SteerViT)**: SteerViT が 336px 入力で生成した heatmap (24×24 grid)
-- **teacher (bbox mask)**: GT bbox の patch overlap を正規化した分布 (14×14 grid)
-- **student**: TinySteerViT の出力 heatmap (14×14 grid)
+- **full image + bbox**: input image with the text and the GT bbox drawn as a yellow box
+- **teacher (SteerViT)**: heatmap produced by SteerViT from a 336px input (24×24 grid)
+- **teacher (bbox mask)**: normalized patch-overlap distribution of the GT bbox (14×14 grid)
+- **student**: output heatmap of TinySteerViT (14×14 grid)
 
-カスタム probe を使う場合:
+To use custom probes:
 
 ```json
 [
@@ -572,7 +572,7 @@ python train.py --config configs/config.yaml --resume ./ckpts/best_model.pth
 ]
 ```
 
-`bbox` は `[x1, y1, x2, y2]` 相対座標。省略時は `[0, 0, 1, 1]`（画像全体）を使用。
+`bbox` is `[x1, y1, x2, y2]` in relative coordinates. If omitted, `[0, 0, 1, 1]` (the whole image) is used.
 
 ```bash
 python train.py --config configs/config.yaml --vis-samples probes.json --vis-every 1
@@ -580,50 +580,50 @@ python train.py --config configs/config.yaml --vis-samples probes.json --vis-eve
 
 ---
 
-## 評価 (CORE Benchmark)
+## Evaluation (CORE Benchmark)
 
-論文 (arXiv:2604.02327) の CORE (COnditional REtrieval) ベンチマークの代替評価として、
-RefCOCO / RefCOCO+ / RefCOCOg / Visual Genome / GQA の Pointing Accuracy を計測する。
+As a proxy for the CORE (COnditional REtrieval) benchmark from the paper (arXiv:2604.02327),
+Pointing Accuracy is measured on RefCOCO / RefCOCO+ / RefCOCOg / Visual Genome / GQA.
 
-テキストエンコーダはチェックポイントから自動復元される。
+The text encoder is restored automatically from the checkpoint.
 
-### 評価指標
+### Metrics
 
-| 指標 | 説明 |
+| Metric | Description |
 |------|------|
-| **PA** (Pointing Accuracy) | argmax heatmap patch の中心が GT bbox 内なら hit |
-| **AHP** (Avg Heatmap Precision) | GT bbox 内の heatmap 質量の割合 |
-| **PA_wrong** | テキストをシャッフルしたときの PA |
-| **ΔPA** | PA − PA_wrong（大きいほどテキスト依存） |
+| **PA** (Pointing Accuracy) | hit if the center of the argmax heatmap patch is inside the GT bbox |
+| **AHP** (Avg Heatmap Precision) | fraction of heatmap mass inside the GT bbox |
+| **PA_wrong** | PA when the text prompts are shuffled |
+| **ΔPA** | PA − PA_wrong (larger = more text-dependent) |
 
-### 実行例
+### Examples
 
 ```bash
-# config.yaml のパスを使って評価
+# Evaluate using the paths in config.yaml
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth
 
-# split を指定
+# Specify a split
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --split val
 
-# データセットを切り替え
+# Switch datasets
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --dataset refcoco+
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --dataset vg
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --dataset gqa
 
-# サンプル数を制限して高速確認
+# Limit the number of samples for a quick check
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --max-samples 500
 
-# SteerViT との比較をスキップ (TinySteerViT のみ)
+# Skip the comparison with SteerViT (TinySteerViT only)
 python test.py --config configs/config.yaml --ckpt ./ckpts_picopilot_all/best_model.pth --no-steervit
 ```
 
 ---
 
-## ファイル構成
+## File structure
 
 ```
 MiniPilot/
-  configs/                # 全パラメータ・パスのデフォルト設定 (config.yaml / config_tiny.yaml / config_distill.yaml)
+  configs/                # default settings for all parameters and paths (config.yaml / config_tiny.yaml / config_distill.yaml)
   model.py                # GatedCrossAttn / TinyViTBackbone / EfficientFormerV2Backbone
                           # FastViTBackbone / MobileViTXXSBackbone / TinySteerViT
                           # TeacherCache / MultiTeacherCache
@@ -631,9 +631,9 @@ MiniPilot/
                           # TEXT_ENCODERS / VISION_ENCODERS
   dataset.py              # RefCOCOLocalDataset / COCODetDataset / VGRegionDataset
                           # GQASceneGraphDataset / _IndexedWrapper / build_loaders
-  train.py                # 学習スクリプト
-  test.py                 # CORE benchmark 評価スクリプト
+  train.py                # training script
+  test.py                 # CORE benchmark evaluation script
   requirements.txt        # requirements
-  train.sh                # 学習の実行例 (bash train.sh <minipilot|nanopilot|picopilot|femtopilot>)
-  test.sh                 # 評価の実行例 (bash test.sh <ckpt_path>)
+  train.sh                # training example (bash train.sh <minipilot|nanopilot|picopilot|femtopilot>)
+  test.sh                 # evaluation example (bash test.sh <ckpt_path>)
 ```
