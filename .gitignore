@@ -1,0 +1,24 @@
+# Checkpoints / pretrained weights
+ckpts_*/
+pretrained_weights/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+*.egg-info/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
