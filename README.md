@@ -33,8 +33,8 @@ python train.py --config configs/config.yaml --vision-encoder mobilevit_xxs --te
 
 ## Result
 
-Results of the CORE benchmark proxy evaluation (`test.py`, `--no-steervit`). Values are in %; bold marks the best value in each column.
-Training setup shared by all models: `--teacher bbox --dataset all --epochs 30`.
+Results of the CORE benchmark proxy evaluation (`test.py`). Values are in %; bold marks the best value in each column.
+Training setup shared by MiniPilot / NanoPilot: `--teacher bbox --dataset all --epochs 30`. SteerViT is the original pretrained model (`steervit_dinov2_base.pth`, 336px input, 24×24 grid) evaluated with the same script.
 
 - **PA** (Pointing Accuracy): fraction of samples where the center of the heatmap's argmax patch falls inside the GT bbox (↑)
 - **AHP** (Avg Heatmap Precision): fraction of heatmap mass inside the GT bbox (↑)
@@ -42,40 +42,45 @@ Training setup shared by all models: `--teacher bbox --dataset all --epochs 30`.
 
 ### PA (%)
 
-| Model | Vision | Text | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **MiniPilot** | DINOv3 ViT-S/16 | MiniLM-L6 | **84.5** | **88.2** | **82.0** | **72.0** | **78.3** | **62.6** | **79.2** | **73.8** | **59.4** |
-| NanoPilot | ViT-Tiny/16 | MiniLM-L6 | 79.0 | 79.4 | 77.6 | 64.5 | 69.4 | 58.5 | 71.4 | 64.9 | 51.7 |
+| Model | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SteerViT (original) | **87.9** | **89.6** | **85.3** | **80.4** | **86.3** | **74.3** | **84.2** | 71.1 | 53.0 |
+| **MiniPilot** | 84.5 | 88.2 | 82.0 | 72.0 | 78.3 | 62.6 | 79.2 | **73.8** | **59.4** |
+| NanoPilot | 79.0 | 79.4 | 77.6 | 64.5 | 69.4 | 58.5 | 71.4 | 64.9 | 51.7 |
 
 ### AHP (%)
 
-| Model | Vision | Text | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **MiniPilot** | DINOv3 ViT-S/16 | MiniLM-L6 | **76.0** | **79.1** | **73.1** | **64.5** | **71.1** | **56.0** | **69.7** | **63.7** | **53.5** |
-| NanoPilot | ViT-Tiny/16 | MiniLM-L6 | 67.3 | 68.2 | 66.4 | 54.3 | 57.6 | 50.0 | 59.5 | 53.6 | 44.8 |
+| Model | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SteerViT (original) | **80.1** | **84.2** | **75.4** | **74.9** | **82.2** | **66.5** | **78.0** | 61.6 | 47.9 |
+| **MiniPilot** | 76.0 | 79.1 | 73.1 | 64.5 | 71.1 | 56.0 | 69.7 | **63.7** | **53.5** |
+| NanoPilot | 67.3 | 68.2 | 66.4 | 54.3 | 57.6 | 50.0 | 59.5 | 53.6 | 44.8 |
 
 ### PA_wrong (%)
 
-| Model | Vision | Text | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **MiniPilot** | DINOv3 ViT-S/16 | MiniLM-L6 | 20.9 | 25.0 | 22.3 | 23.7 | 26.1 | 26.6 | 30.5 | 23.3 | 17.5 |
-| NanoPilot | ViT-Tiny/16 | MiniLM-L6 | 22.5 | 24.9 | 22.8 | 24.6 | 27.4 | 26.1 | 30.3 | 23.3 | 17.3 |
+| Model | RefCOCO val | RefCOCO testA | RefCOCO testB | RefCOCO+ val | RefCOCO+ testA | RefCOCO+ testB | RefCOCOg val | VG val | GQA val |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SteerViT (original) | 26.0 | 28.7 | 29.2 | 28.1 | 28.8 | 30.5 | 32.6 | 23.5 | 18.2 |
+| **MiniPilot** | 20.9 | 25.0 | 22.3 | 23.7 | 26.1 | 26.6 | 30.5 | 23.3 | 17.5 |
+| NanoPilot | 22.5 | 24.9 | 22.8 | 24.6 | 27.4 | 26.1 | 30.3 | 23.3 | 17.3 |
 
-- MiniPilot (DINOv3) is the best on every dataset. Compared with NanoPilot (ViT-Tiny), its PA is +4–9pt higher on RefCOCO, +8.9pt on VG and +7.7pt on GQA.
+- SteerViT is better on RefCOCO / RefCOCO+ / RefCOCOg. The PA gap to MiniPilot is small on RefCOCO (+1.4–3.4pt), +5.0pt on RefCOCOg and largest on RefCOCO+ (+8–12pt).
+- MiniPilot beats SteerViT on VG (+2.7pt PA) and GQA (+6.4pt PA). MiniPilot was trained with `--dataset all` (including VG and GQA), which likely helps on these in-distribution sets.
+- MiniPilot (DINOv3) is the best of the small models on every dataset. Compared with NanoPilot (ViT-Tiny), its PA is +4–9pt higher on RefCOCO, +8.9pt on VG and +7.7pt on GQA.
 - NanoPilot's RefCOCO+ / RefCOCOg / GQA numbers are taken from the text logs (`logs/test_output_minilm_l6_*.txt`).
 
 ### Model size and compute (vs. SteerViT)
 
 | Model | Vision / Text | Total params | Trainable | FLOPs (B=1) | RefCOCO val PA |
 |---|---|---:|---:|---:|---:|
-| SteerViT (original) | DINOv2 ViT-B/14 / RoBERTa-large | 464.4M | 23.1M | 135.76G (336px) | — |
+| SteerViT (original) | DINOv2 ViT-B/14 / RoBERTa-large | 464.4M | 23.1M | 135.76G (336px) | 87.9 |
 | **MiniPilot** | DINOv3 ViT-S/16 / MiniLM-L6 | 53.3M (11.5%) | 9.03M | 11.55G (8.5%) | 84.5 |
 | NanoPilot | ViT-Tiny/16 / MiniLM-L6 | 30.5M (6.6%) | 2.30M | 3.38G (2.5%) | 79.0 |
 
 - (%) is relative to SteerViT. Trainable = connector + GatedCrossAttn + lin_seg_head.
 - Values are taken from the parameter / FLOPs tables printed by `test.py`.
 - 76% of SteerViT's parameters are in the text encoder (RoBERTa-large, 355M). For MiniPilot / NanoPilot the text side (MiniLM-L6, 22.7M) still accounts for 40–70% of the total.
-- SteerViT's own accuracy has not been evaluated (all evaluations were run with `--no-steervit`).
+- SteerViT was evaluated with `test.py` (without `--no-steervit`); logs are in `logs/test_output_steervit_*.txt`. MiniPilot reaches 96% of SteerViT's RefCOCO val PA with 11.5% of the parameters and 8.5% of the FLOPs.
 
 ---
 
@@ -206,6 +211,9 @@ Required packages: `torch`, `timm >= 1.0`, `transformers`, `torchvision`, `pycoc
 | COCO 2017 | `/data2/kato/dataset/coco/` | `train2017/`, `val2017/`, `annotations/` |
 | Visual Genome | `/data2/kato/dataset/vg/` | `region_descriptions.json` |
 | GQA | `/data2/kato/dataset/GQA/` | `*_sceneGraphs.json` |
+| BDD100k | `/data2/kato/dataset/BDD100k/` | WIP |
+| LVIS | `/data2/kato/dataset/lvis/` | WIP |
+| Object365 | WIP | WIP |
 
 Paths can be changed in the `paths` section of `config.yaml`.
 
